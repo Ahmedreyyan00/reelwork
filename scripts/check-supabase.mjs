@@ -12,13 +12,9 @@ const mask = (value, visible = 6) => {
   return `${value.slice(0, visible)}…${value.slice(-visible)}`;
 };
 
-async function main() {
+async function checkSupabase() {
   console.log("🔍 Checking Supabase configuration…");
   console.log("  NEXT_PUBLIC_SUPABASE_URL:", SUPABASE_URL || "(missing)");
-  console.log(
-    "  NEXT_PUBLIC_SUPABASE_ANON_KEY:",
-    mask(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-  );
   console.log(
     "  SUPABASE_SERVICE_ROLE_KEY:",
     mask(SUPABASE_SERVICE_ROLE_KEY)
@@ -26,7 +22,7 @@ async function main() {
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error(
-      "❌ Missing required Supabase environment variables. Update .env.local."
+      "❌ Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local."
     );
     process.exit(1);
   }
@@ -36,14 +32,21 @@ async function main() {
     ""
   )}/rest/v1/${TABLE}?select=id&limit=1`;
 
+  console.log(`\n🌐 Testing REST endpoint: ${restUrl}`);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
   try {
-    console.log(`\n🌐 Testing REST endpoint: ${restUrl}`);
     const response = await fetch(restUrl, {
       headers: {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const details = await response.text();
@@ -62,11 +65,17 @@ async function main() {
         : "   Table reachable (no rows returned)."
     );
   } catch (error) {
-    console.error("❌ Failed to reach Supabase REST endpoint.");
-    console.error(error);
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error(
+        "❌ Request timed out (10 seconds). If you are using a proxy or VPN, set HTTPS_PROXY or retry with NODE_OPTIONS=\"--dns-result-order=ipv4first\"."
+      );
+    } else {
+      console.error("❌ Failed to reach Supabase REST endpoint.");
+      console.error(error);
+    }
     process.exit(1);
   }
 }
 
-main();
-
+checkSupabase();
