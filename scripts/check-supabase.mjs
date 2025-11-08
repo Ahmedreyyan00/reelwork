@@ -1,0 +1,72 @@
+import { config } from "dotenv";
+
+config({ path: ".env.local" });
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+const TABLE = "video_uploads";
+
+const mask = (value, visible = 6) => {
+  if (!value) return "";
+  if (value.length <= visible) return value;
+  return `${value.slice(0, visible)}…${value.slice(-visible)}`;
+};
+
+async function main() {
+  console.log("🔍 Checking Supabase configuration…");
+  console.log("  NEXT_PUBLIC_SUPABASE_URL:", SUPABASE_URL || "(missing)");
+  console.log(
+    "  NEXT_PUBLIC_SUPABASE_ANON_KEY:",
+    mask(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  );
+  console.log(
+    "  SUPABASE_SERVICE_ROLE_KEY:",
+    mask(SUPABASE_SERVICE_ROLE_KEY)
+  );
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      "❌ Missing required Supabase environment variables. Update .env.local."
+    );
+    process.exit(1);
+  }
+
+  const restUrl = `${SUPABASE_URL.replace(
+    /\/$/,
+    ""
+  )}/rest/v1/${TABLE}?select=id&limit=1`;
+
+  try {
+    console.log(`\n🌐 Testing REST endpoint: ${restUrl}`);
+    const response = await fetch(restUrl, {
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      console.error(
+        `❌ Supabase responded with ${response.status} ${response.statusText}`
+      );
+      console.error("   Response body:", details);
+      process.exit(1);
+    }
+
+    const data = await response.json();
+    console.log("✅ Supabase connection successful.");
+    console.log(
+      Array.isArray(data) && data.length > 0
+        ? `   Retrieved ${data.length} row(s).`
+        : "   Table reachable (no rows returned)."
+    );
+  } catch (error) {
+    console.error("❌ Failed to reach Supabase REST endpoint.");
+    console.error(error);
+    process.exit(1);
+  }
+}
+
+main();
+

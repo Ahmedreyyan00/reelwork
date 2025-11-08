@@ -11,11 +11,12 @@ type RecordingStatus =
   | "error";
 
 type UploadDetails = {
-  streamUID: string;
+  assetId: string;
   uploadURL: string;
 };
 
 type VideoRecorderProps = {
+  candidateId?: string;
   onUploaded?: (details: { streamUID: string }) => void;
   onReset?: () => void;
 };
@@ -23,7 +24,11 @@ type VideoRecorderProps = {
 const MIN_DURATION_MS = 30_000;
 const MAX_DURATION_MS = 45_000;
 
-export function VideoRecorder({ onUploaded, onReset }: VideoRecorderProps) {
+export function VideoRecorder({
+  candidateId,
+  onUploaded,
+  onReset,
+}: VideoRecorderProps) {
   const [status, setStatus] = useState<RecordingStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
@@ -175,13 +180,14 @@ export function VideoRecorder({ onUploaded, onReset }: VideoRecorderProps) {
     try {
       const uploadDetails = await requestUploadUrl();
       await uploadBlob(uploadDetails, recordedBlob);
+      await registerStream(uploadDetails.assetId, candidateId);
       setStatus("uploaded");
       setRecordedBlob(null);
       if (recordedUrl) {
         URL.revokeObjectURL(recordedUrl);
         setRecordedUrl(null);
       }
-      onUploaded?.({ streamUID: uploadDetails.streamUID });
+      onUploaded?.({ streamUID: uploadDetails.assetId });
     } catch (cause) {
       console.error(cause);
       setError(
@@ -193,7 +199,7 @@ export function VideoRecorder({ onUploaded, onReset }: VideoRecorderProps) {
     } finally {
       setUploading(false);
     }
-  }, [onUploaded, recordedBlob, recordedUrl]);
+  }, [candidateId, onUploaded, recordedBlob, recordedUrl]);
 
   const isMinDurationReached = elapsedMs >= MIN_DURATION_MS;
   const seconds = Math.floor(elapsedMs / 1000);
@@ -350,6 +356,21 @@ async function uploadBlob(details: UploadDetails, blob: Blob) {
 
   if (!response.ok) {
     throw new Error("Failed to upload video to Cloudflare Stream.");
+  }
+}
+
+async function registerStream(assetId: string, candidateId?: string) {
+  const response = await fetch("/api/videos/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ assetId, candidateId }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error ?? "Failed to register video upload.");
   }
 }
 

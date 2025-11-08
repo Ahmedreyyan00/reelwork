@@ -3,16 +3,16 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
 type RequestPayload = {
-  streamUID?: string;
+  assetId?: string;
   candidateId?: string;
 };
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
 
-  if (!payload.streamUID) {
+  if (!payload.assetId) {
     return NextResponse.json(
-      { error: "Missing streamUID in request body." },
+      { error: "Missing assetId in request body." },
       { status: 400 }
     );
   }
@@ -20,11 +20,34 @@ export async function POST(request: Request) {
   try {
     const supabase = createSupabaseServerClient();
 
-    const { error } = await supabase.from("video_uploads").insert({
-      stream_uid: payload.streamUID,
+    let { error } = await supabase.from("video_uploads").insert({
+      stream_uid: payload.assetId,
       candidate_id: payload.candidateId ?? null,
       status: "pending",
     });
+
+    if (error && error.message.includes("schema cache")) {
+      await supabase.rpc("pg_notify", {
+        channel: "postgrest",
+        payload: "reload schema",
+      });
+
+      const warmup = await supabase
+        .from("video_uploads")
+        .select("id")
+        .limit(1);
+
+      error = warmup.error;
+
+      if (!warmup.error) {
+        const retry = await supabase.from("video_uploads").insert({
+          stream_uid: payload.assetId,
+          candidate_id: payload.candidateId ?? null,
+          status: "pending",
+        });
+        error = retry.error ?? null;
+      }
+    }
 
     if (error) {
       return NextResponse.json(

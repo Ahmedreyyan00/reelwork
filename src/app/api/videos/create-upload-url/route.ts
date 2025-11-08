@@ -1,65 +1,80 @@
 import { NextResponse } from "next/server";
 
-type CloudflareDirectUploadResponse = {
-  success: boolean;
-  errors: Array<{ code: number; message: string }>;
-  result: {
-    uid: string;
-    playback: {
-      hls: string;
-      dash: string | null;
+type MuxUploadResponse = {
+  data: {
+    id: string;
+    created_at: string;
+    new_asset_settings: {
+      playback_policy: string[];
     };
-    readyToStream: boolean;
-    uploadURL: string;
+    timeout: number;
+    upload_url: string;
   };
 };
 
 export async function POST() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const apiToken = process.env.CLOUDFLARE_STREAM_TOKEN;
+  const muxTokenId = process.env.MUX_TOKEN_ID;
+  const muxTokenSecret = process.env.MUX_TOKEN_SECRET;
 
-  if (!accountId || !apiToken) {
+  if (!muxTokenId || !muxTokenSecret) {
     return NextResponse.json(
       {
         error:
-          "Cloudflare Stream environment variables are missing. Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_STREAM_TOKEN.",
+          "Mux environment variables are missing. Set MUX_TOKEN_ID and MUX_TOKEN_SECRET.",
       },
       { status: 500 }
     );
   }
 
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/direct_upload`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-        "Content-Type": "application/json",
+  const response = await fetch("https://api.mux.com/video/v1/uploads", {
+    method: "POST",
+    headers: {
+      Authorization:
+        "Basic " +
+        Buffer.from(`${muxTokenId}:${muxTokenSecret}`).toString("base64"),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      new_asset_settings: {
+        playback_policy: ["public"],
       },
-      body: JSON.stringify({
-        maxDurationSeconds: 60,
-        allowedOrigins: ["*"],
-        creator: "candidate",
-        requireSignedURLs: false,
-      }),
-    }
-  );
+      cors_origin: "*",
+      timeout: 60,
+    }),
+  });
 
-  const payload = (await response.json()) as CloudflareDirectUploadResponse;
+  const payload = (await response.json()) as MuxUploadResponse;
 
-  if (!response.ok || !payload.success) {
+  if (!response.ok) {
     return NextResponse.json(
       {
-        error: "Failed to generate Cloudflare Stream direct upload URL.",
-        details: payload.errors,
+        error: "Failed to generate Mux direct upload URL.",
+        details: payload,
+      },
+      { status: 502 }
+    );
+  }
+
+  const uploadUrl =
+    payload?.data?.upload_url ??
+    // some Mux responses use `url` for the temporary upload link
+    // depending on account features.
+    (payload?.data as { url?: string })?.url ??
+    null;
+
+  if (!uploadUrl) {
+    return NextResponse.json(
+      {
+        error: "Mux response did not include an upload URL.",
+        details: payload,
       },
       { status: 502 }
     );
   }
 
   return NextResponse.json({
-    uploadURL: payload.result.uploadURL,
-    streamUID: payload.result.uid,
+    uploadURL: uploadUrl,
+    assetId: payload.data.id,
   });
 }
 
