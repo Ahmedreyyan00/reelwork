@@ -24,6 +24,7 @@ export function FeedViewer({ videos }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const [activeIndex, setActiveIndex] = useState(0);
+  const [mutedMap, setMutedMap] = useState<Record<string, boolean>>({});
 
   const sortedVideos = useMemo(() => videos ?? [], [videos]);
 
@@ -135,6 +136,32 @@ export function FeedViewer({ videos }: Props) {
     }
   }, [activeIndex, sortedVideos]);
 
+  useEffect(() => {
+    if (sortedVideos.length) {
+      setMutedMap((prev) => {
+        const next = { ...prev };
+        sortedVideos.forEach((video) => {
+          if (!(video.uploadId in next)) {
+            next[video.uploadId] = true;
+          }
+        });
+        return next;
+      });
+    }
+  }, [sortedVideos]);
+
+  useEffect(() => {
+    setMutedMap((prev) => {
+      const next = { ...prev };
+      sortedVideos.forEach((video, index) => {
+        if (index !== activeIndex) {
+          next[video.uploadId] = true;
+        }
+      });
+      return next;
+    });
+  }, [activeIndex, sortedVideos]);
+
   if (!sortedVideos.length) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-slate-300">
@@ -163,7 +190,7 @@ export function FeedViewer({ videos }: Props) {
               poster={`https://image.mux.com/${video.playbackId}/thumbnail.png?time=1`}
               className="h-full w-full object-cover"
               playsInline
-              muted
+              muted={mutedMap[video.uploadId] ?? true}
               loop
               preload="metadata"
               controls={false}
@@ -172,6 +199,18 @@ export function FeedViewer({ videos }: Props) {
             <div className="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs uppercase tracking-wide text-white/80">
               Live video
             </div>
+            <button
+              type="button"
+              onClick={() =>
+                setMutedMap((prev) => ({
+                  ...prev,
+                  [video.uploadId]: !(prev[video.uploadId] ?? true),
+                }))
+              }
+              className="absolute right-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/80 transition hover:bg-black/80"
+            >
+              {mutedMap[video.uploadId] ?? true ? "Unmute" : "Mute"}
+            </button>
             <div className="absolute bottom-4 left-4 rounded-full bg-black/60 px-3 py-1 text-xs text-white/80">
               {index + 1} / {sortedVideos.length}
             </div>

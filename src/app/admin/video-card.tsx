@@ -31,6 +31,7 @@ export function AdminVideoCard({ video, onStatusChange }: Props) {
   const [status, setStatus] = useState(video.status);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(true);
 
   const handleMouseEnter = useCallback((event: MouseEvent<HTMLVideoElement>) => {
     setIsHovering(true);
@@ -96,7 +97,7 @@ export function AdminVideoCard({ video, onStatusChange }: Props) {
               isHovering ? "opacity-100" : "opacity-90"
             }`}
             playsInline
-            muted
+            muted={isMuted}
             loop
             preload="metadata"
             onMouseEnter={handleMouseEnter}
@@ -114,6 +115,15 @@ export function AdminVideoCard({ video, onStatusChange }: Props) {
         <div className="absolute left-4 top-4 rounded-full bg-slate-950/80 px-3 py-1 text-xs uppercase tracking-wide text-slate-100">
           {STATUS_LABELS[status] ?? status}
         </div>
+        {video.playbackId ? (
+          <button
+            type="button"
+            onClick={() => setIsMuted((prev) => !prev)}
+            className="absolute right-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/80 transition hover:bg-black/80"
+          >
+            {isMuted ? "Unmute" : "Mute"}
+          </button>
+        ) : null}
       </div>
 
       <footer className="flex flex-1 flex-col gap-3 p-4 text-xs text-slate-300">
