@@ -229,7 +229,7 @@ export function VideoRecorder({
       <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 text-white">
         {mediaStream ? (
           <video
-            className="aspect-[9/16] w-full bg-slate-900 object-cover"
+            className="aspect-[9/16] w-full bg-slate-900 object-cover scale-x-[-1]"
             autoPlay
             playsInline
             muted
